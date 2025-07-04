@@ -19,8 +19,6 @@ if not DB_URL:
     print("Please create a .env file with your DATABASE_URL or set it as an environment variable.")
     print("Example: DATABASE_URL=postgresql://username:password@host:port/database")
     # Use a fallback SQLite database for development
-    DB_URL = "sqlite:///poker_sim.db"
-    print(f"Using fallback SQLite database: {DB_URL}")
 
 # Validate URL format
 try:
@@ -31,25 +29,18 @@ try:
 except Exception as e:
     print(f"URL parsing error: {e}")
     print("Using fallback SQLite database.")
-    DB_URL = "sqlite:///poker_sim.db"
 
+# Create the SQLAlchemy engine
 try:
-    engine = create_engine(DB_URL)
-    # Test the connection
-    with engine.connect() as conn:
-        conn.execute(select(1))
-    print("Database connection successful!")
+    if DB_URL:
+        engine = create_engine(DB_URL)
+    else:
+        engine = create_engine("sqlite:///fallback.db")
+    print("Engine created successfully!")
 except ArgumentError as e:
-    print(f"SQLAlchemy URL parsing error: {e}")
-    print("Please check your DATABASE_URL format.")
-    print("Using fallback SQLite database for development.")
-    engine = create_engine("sqlite:///poker_sim.db")
-except Exception as e:
-    print(f"Database connection failed: {e}")
-    print("Please check your DATABASE_URL and network connection.")
-    # Create a fallback SQLite engine
-    engine = create_engine("sqlite:///poker_sim.db")
-    print("Using fallback SQLite database for development.")
+    print(f"Error creating engine: {e}")
+    engine = create_engine("sqlite:///fallback.db")
+    print("Fallback SQLite engine created.")
 
 metadata = MetaData()
 
@@ -83,6 +74,7 @@ def save_hand(hand, bet, equity, bankroll):
         print(f"Hand {hand} saved successfully!")
     except Exception as e:
         print(f"Error saving hand: {e}")
+        raise
 
 def get_hand_history():
     try:
