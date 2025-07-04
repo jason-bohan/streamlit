@@ -1,6 +1,7 @@
 
 import streamlit as st
 from treys import Card, Evaluator, Deck
+from db import save_hand, get_hand_history, clear_history
 import random
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -85,7 +86,8 @@ if st.button("🧮 Calculate Equity & Suggest Bet"):
         st.session_state.pot_size = 0.0
         st.session_state.hands_played = 0
         st.session_state.history.clear()
-        st.success(f"Bankroll reset to ${starting_bankroll}")
+        clear_history()
+        st.success(f"Bankroll reset to ${starting_bankroll} and history cleared from DB")
 
     pot_size = st.number_input("Current Pot Size ($)", min_value=0.01, value=10.0, step=0.5, format="%.2f")
     call_amount = st.number_input("Amount to Call ($)", min_value=0.01, value=5.0, step=0.5, format="%.2f")
@@ -109,17 +111,32 @@ if st.button("🧮 Calculate Equity & Suggest Bet"):
         st.session_state.bankroll -= suggested_bet
         st.session_state.pot_size += suggested_bet
         st.session_state.hands_played += 1
-        st.session_state.history.append({
-            "Hand": st.session_state.hands_played,
-            "Bet": suggested_bet,
-            "Equity": round(equity * 100, 2),
-            "Bankroll": st.session_state.bankroll
-        })
-        st.success(f"Bet ${suggested_bet} applied. Pot is now ${st.session_state.pot_size:.2f}")
+
+    equity_pct = round(equity * 100, 2)
+
+    # Save to session state (optional)
+    st.session_state.history.append({
+        "Hand": st.session_state.hands_played,
+        "Bet": suggested_bet,
+        "Equity": equity_pct,
+        "Bankroll": st.session_state.bankroll
+    })
+
+    # ✅ Save to Supabase
+    save_hand(
+        hand=st.session_state.hands_played,
+        bet=suggested_bet,
+        equity=equity_pct,
+        bankroll=st.session_state.bankroll
+    )
+
+    st.success(f"Bet ${suggested_bet} applied. Pot is now ${st.session_state.pot_size:.2f}")
+
 
 # ---------- History & Chart ----------
 if st.checkbox("📜 Show Hand History and Bankroll Chart"):
-    hist_df = pd.DataFrame(st.session_state.history)
+    rows = get_hand_history()
+    hist_df = pd.DataFrame(rows, columns=["id", "hand", "bet", "equity", "bankroll", "created_at"])
     if not hist_df.empty:
         st.line_chart(hist_df.set_index("Hand")[["Bankroll"]])
         st.dataframe(hist_df)

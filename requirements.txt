@@ -1,1 +1,7 @@
 treys==0.1.8
+streamlit
+sqlalchemy
+psycopg2-binary
+python-dotenv
+pandas
+matplotlib
