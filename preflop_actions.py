@@ -10,6 +10,7 @@ preflop_actions = {
         "AA": "Raise 3x",
         "KK": "Raise 3x",
         "QQ": "Raise 2.5x",
+        "JJ": "Raise 2x",
         "AKs": "Raise 2.5x",
         "Any": "Fold"
     },
