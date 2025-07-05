@@ -4,6 +4,7 @@ from db import save_hand, get_hand_history, clear_history
 import random
 import matplotlib.pyplot as plt
 import pandas as pd
+from postflop_actions import postflop_actions
 from preflop_rules import preflop_rules
 from preflop_actions import preflop_actions
 import json
@@ -258,7 +259,7 @@ if len(board) == 3:
     if hand_class_options:
         selected_hand_class = st.selectbox("Select Your Hand Class on Flop", hand_class_options, key="flop_hand_class")
         if st.button("Get Postflop GTO Action"):
-            action = get_postflop_action(postflop_json, "FlopCategory", flop_category, selected_hand_class)
+            action = postflop_actions("FlopCategory", flop_category, selected_hand_class)
             st.success(f"Postflop GTO Action: {action}")
     else:
         st.info("No postflop GTO actions defined for this flop category.")
