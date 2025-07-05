@@ -9,6 +9,60 @@ from preflop_actions import preflop_actions
 import json
 import os
 
+def categorize_flop(board):
+    """
+    Categorize a flop board into a high-level GTO board category for postflop lookup.
+    board: list of 3 strings, e.g. ["Ac", "As", "2d"]
+    Returns: category string, e.g. "PairedRainbow"
+    """
+    ranks = [card[0] for card in board]
+    suits = [card[1] for card in board]
+    unique_ranks = set(ranks)
+    unique_suits = set(suits)
+    is_paired = len(unique_ranks) < 3
+    is_monotone = len(unique_suits) == 1
+    is_rainbow = len(unique_suits) == 3
+    is_two_tone = len(unique_suits) == 2
+    has_ace = "A" in ranks
+    high_cards = {"J", "Q", "K", "T", "9"}
+    has_broadway = any(r in high_cards for r in ranks)
+    is_connected = False
+    try:
+        rank_order = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        idxs = sorted([rank_order.index(r) for r in ranks])
+        is_connected = idxs[2] - idxs[0] <= 4
+    except Exception:
+        pass
+    if is_paired and is_rainbow:
+        return "PairedRainbow"
+    if has_ace and is_monotone:
+        return "AceHighMonotone"
+    if has_ace and is_rainbow:
+        return "DryAceHigh"
+    if has_broadway and is_two_tone and is_connected:
+        return "WetBroadway"
+    if is_connected and is_two_tone and not has_ace:
+        return "LowConnectedTwoTone"
+    if is_paired and not has_ace:
+        return "StaticMidPair"
+    return "Generic"
+
+def get_hand_notation(card1, card2):
+    r1, s1 = card1[0], card1[1]
+    r2, s2 = card2[0], card2[1]
+    if r1 == r2:
+        return r1 + r2  # e.g., "AA"
+    suited = "s" if s1 == s2 else "o"
+    # Sort ranks for standard notation (AK, not KA)
+    # Always put the higher rank first according to poker order
+    rank_order = {"A": 14, "K": 13, "Q": 12, "J": 11, "T": 10,
+                  "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2}
+    if rank_order[r1] > rank_order[r2]:
+        ranks = r1 + r2
+    else:
+        ranks = r2 + r1
+    return ranks + suited
+
 # ---------- Session State Initialization ----------
 if 'bankroll' not in st.session_state:
     st.session_state.bankroll = 100.0
@@ -112,22 +166,6 @@ def estimate_equity_multiway(hero_hand, board, num_simulations=500, num_villains
 
     return (hero_wins + ties * 0.5) / num_simulations
 
-def get_hand_notation(card1, card2):
-    r1, s1 = card1[0], card1[1]
-    r2, s2 = card2[0], card2[1]
-    if r1 == r2:
-        return r1 + r2  # e.g., "AA"
-    suited = "s" if s1 == s2 else "o"
-    # Sort ranks for standard notation (AK, not KA)
-    # Always put the higher rank first according to poker order
-    rank_order = {"A": 14, "K": 13, "Q": 12, "J": 11, "T": 10,
-                  "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2}
-    if rank_order[r1] > rank_order[r2]:
-        ranks = r1 + r2
-    else:
-        ranks = r2 + r1
-    return ranks + suited
-
 # ---------- Equity & Kelly Section ----------
 with st.form("kelly_form"):
     pot_size = st.number_input(
@@ -208,6 +246,23 @@ if calculate:
     st.info(f"Preflop Action ({strategy}): {action}")
     st.success(f"💵 Suggested Bet: ${suggested_bet}")
 
+# After board is constructed and before/after equity calculation
+if len(board) == 3:
+    flop_category = categorize_flop(board)
+    st.info(f"Flop Category: {flop_category}")
+    # Postflop GTO action lookup
+    postflop_json = gto_data if 'Postflop' in gto_data else {}
+    hand_class_options = []
+    if postflop_json:
+        hand_class_options = list(postflop_json.get("Postflop", {}).get("FlopCategory", {}).get(flop_category, {}).keys())
+    if hand_class_options:
+        selected_hand_class = st.selectbox("Select Your Hand Class on Flop", hand_class_options, key="flop_hand_class")
+        if st.button("Get Postflop GTO Action"):
+            action = get_postflop_action(postflop_json, "FlopCategory", flop_category, selected_hand_class)
+            st.success(f"Postflop GTO Action: {action}")
+    else:
+        st.info("No postflop GTO actions defined for this flop category.")
+
 if apply_bet:
     suggested_bet = st.session_state.get("suggested_bet", 0)
     equity = st.session_state.get("equity", 0)
@@ -244,44 +299,6 @@ if st.checkbox("📜 Show Hand History and Bankroll Chart"):
         hist_df["equity"] = hist_df["equity"].astype(float)
         st.line_chart(hist_df.set_index("hand")[["bankroll"]])
         st.dataframe(hist_df)
-
-def categorize_flop(board):
-    """
-    Categorize a flop board into a high-level GTO board category for postflop lookup.
-    board: list of 3 strings, e.g. ["Ac", "As", "2d"]
-    Returns: category string, e.g. "PairedRainbow"
-    """
-    ranks = [card[0] for card in board]
-    suits = [card[1] for card in board]
-    unique_ranks = set(ranks)
-    unique_suits = set(suits)
-    is_paired = len(unique_ranks) < 3
-    is_monotone = len(unique_suits) == 1
-    is_rainbow = len(unique_suits) == 3
-    is_two_tone = len(unique_suits) == 2
-    has_ace = "A" in ranks
-    high_cards = {"J", "Q", "K", "T", "9"}
-    has_broadway = any(r in high_cards for r in ranks)
-    is_connected = False
-    try:
-        rank_order = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-        idxs = sorted([rank_order.index(r) for r in ranks])
-        is_connected = idxs[2] - idxs[0] <= 4
-    except Exception:
-        pass
-    if is_paired and is_rainbow:
-        return "PairedRainbow"
-    if has_ace and is_monotone:
-        return "AceHighMonotone"
-    if has_ace and is_rainbow:
-        return "DryAceHigh"
-    if has_broadway and is_two_tone and is_connected:
-        return "WetBroadway"
-    if is_connected and is_two_tone and not has_ace:
-        return "LowConnectedTwoTone"
-    if is_paired and not has_ace:
-        return "StaticMidPair"
-    return "Generic"
 
 def get_postflop_action(postflop_json, street, board_category, hand_class):
     """
