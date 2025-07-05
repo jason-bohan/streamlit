@@ -250,6 +250,18 @@ if calculate:
 if len(board) == 3:
     flop_category = categorize_flop(board)
     st.info(f"Flop Category: {flop_category}")
+    # Postflop GTO action lookup
+    postflop_json = gto_data if 'Postflop' in gto_data else {}
+    hand_class_options = []
+    if postflop_json:
+        hand_class_options = list(postflop_json.get("Postflop", {}).get("FlopCategory", {}).get(flop_category, {}).keys())
+    if hand_class_options:
+        selected_hand_class = st.selectbox("Select Your Hand Class on Flop", hand_class_options, key="flop_hand_class")
+        if st.button("Get Postflop GTO Action"):
+            action = get_postflop_action(postflop_json, "FlopCategory", flop_category, selected_hand_class)
+            st.success(f"Postflop GTO Action: {action}")
+    else:
+        st.info("No postflop GTO actions defined for this flop category.")
 
 if apply_bet:
     suggested_bet = st.session_state.get("suggested_bet", 0)
