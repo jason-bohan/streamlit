@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from preflop_rules import preflop_rules
 from preflop_actions import preflop_actions
+import json
+import os
 
 # ---------- Session State Initialization ----------
 if 'bankroll' not in st.session_state:
@@ -22,6 +24,18 @@ if 'history' not in st.session_state:
 suits = ['s', 'h', 'd', 'c']
 ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 card_options = [r + s for r in ranks for s in suits]
+
+# Load GTO strategy from JSON and merge into preflop_actions
+GTO_JSON_PATH = os.path.join(os.path.dirname(__file__), "gto_strategy.json")
+try:
+    with open(GTO_JSON_PATH, "r") as f:
+        gto_data = json.load(f)
+    # gto_data is expected to be {"GTO": {...}}
+    if "GTO" in gto_data:
+        preflop_actions["GTO"] = gto_data["GTO"]
+        preflop_rules["GTO"] = "Game Theory Optimal (from gto_strategy.json)"
+except Exception as e:
+    st.warning(f"Failed to load GTO strategy: {e}")
 
 # ---------- UI for Hero Hand ----------
 st.title("♠ Multi-Way Poker Equity & Kelly Betting Simulator")
@@ -105,7 +119,13 @@ def get_hand_notation(card1, card2):
         return r1 + r2  # e.g., "AA"
     suited = "s" if s1 == s2 else "o"
     # Sort ranks for standard notation (AK, not KA)
-    ranks = "".join(sorted([r1, r2], reverse=True))
+    # Always put the higher rank first according to poker order
+    rank_order = {"A": 14, "K": 13, "Q": 12, "J": 11, "T": 10,
+                  "9": 9, "8": 8, "7": 7, "6": 6, "5": 5, "4": 4, "3": 3, "2": 2}
+    if rank_order[r1] > rank_order[r2]:
+        ranks = r1 + r2
+    else:
+        ranks = r2 + r1
     return ranks + suited
 
 # ---------- Equity & Kelly Section ----------
@@ -158,6 +178,7 @@ if calculate:
     st.write(f"📊 Pot Odds: {call_amount / (pot_size + call_amount):.2%}")
     st.write(f"📈 Kelly Fraction: {kelly_fraction:.2%} {'(Half Kelly)' if use_half_kelly else '(Full Kelly)'}")
     hero_hand_notation = get_hand_notation(hero_card1, hero_card2)
+    st.write(f"DEBUG: hero_hand_notation = {hero_hand_notation}")
     strategy = hero_preflop_type
     action = preflop_actions.get(strategy, {}).get(hero_hand_notation, preflop_actions.get(strategy, {}).get("Any", "Check"))
 
@@ -223,4 +244,69 @@ if st.checkbox("📜 Show Hand History and Bankroll Chart"):
         hist_df["equity"] = hist_df["equity"].astype(float)
         st.line_chart(hist_df.set_index("hand")[["bankroll"]])
         st.dataframe(hist_df)
+
+def categorize_flop(board):
+    """
+    Categorize a flop board into a high-level GTO board category for postflop lookup.
+    board: list of 3 strings, e.g. ["Ac", "As", "2d"]
+    Returns: category string, e.g. "PairedRainbow"
+    """
+    ranks = [card[0] for card in board]
+    suits = [card[1] for card in board]
+    unique_ranks = set(ranks)
+    unique_suits = set(suits)
+    is_paired = len(unique_ranks) < 3
+    is_monotone = len(unique_suits) == 1
+    is_rainbow = len(unique_suits) == 3
+    is_two_tone = len(unique_suits) == 2
+    has_ace = "A" in ranks
+    high_cards = {"J", "Q", "K", "T", "9"}
+    has_broadway = any(r in high_cards for r in ranks)
+    is_connected = False
+    try:
+        rank_order = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        idxs = sorted([rank_order.index(r) for r in ranks])
+        is_connected = idxs[2] - idxs[0] <= 4
+    except Exception:
+        pass
+    if is_paired and is_rainbow:
+        return "PairedRainbow"
+    if has_ace and is_monotone:
+        return "AceHighMonotone"
+    if has_ace and is_rainbow:
+        return "DryAceHigh"
+    if has_broadway and is_two_tone and is_connected:
+        return "WetBroadway"
+    if is_connected and is_two_tone and not has_ace:
+        return "LowConnectedTwoTone"
+    if is_paired and not has_ace:
+        return "StaticMidPair"
+    return "Generic"
+
+def get_postflop_action(postflop_json, street, board_category, hand_class):
+    """
+    Looks up the postflop action from the JSON structure.
+    Returns the action string or 'Check' if not found.
+    """
+    try:
+        return postflop_json["Postflop"][street][board_category][hand_class]
+    except KeyError:
+        return "Check"
+
+def get_gto_action_frequencies(strategy_json, hand):
+    """
+    Returns the action frequencies for a given hand, e.g. {"3bet": 0.7, "call": 0.3}
+    """
+    try:
+        return strategy_json["GTO_Frequencies"]["strategy"]["action_frequencies"].get(hand, {"fold": 1.0})
+    except Exception:
+        return {"fold": 1.0}
+
+def suggest_gto_action(action_freqs):
+    """
+    Returns the action with the highest frequency from a dict like {"3bet": 0.7, "call": 0.3}
+    """
+    if not action_freqs:
+        return "fold"
+    return max(action_freqs, key=action_freqs.get)
 
