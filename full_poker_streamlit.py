@@ -4,6 +4,8 @@ from db import save_hand, get_hand_history, clear_history
 import random
 import matplotlib.pyplot as plt
 import pandas as pd
+from preflop_rules import preflop_rules
+from preflop_actions import preflop_actions
 
 # ---------- Session State Initialization ----------
 if 'bankroll' not in st.session_state:
@@ -15,6 +17,7 @@ if 'hands_played' not in st.session_state:
 if 'history' not in st.session_state:
     st.session_state.history = []
 
+
 # ---------- Card Options ----------
 suits = ['s', 'h', 'd', 'c']
 ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
@@ -22,6 +25,14 @@ card_options = [r + s for r in ranks for s in suits]
 
 # ---------- UI for Hero Hand ----------
 st.title("♠ Multi-Way Poker Equity & Kelly Betting Simulator")
+# ---------- Hero Pre-Flop Strategy ----------
+st.subheader("🧑‍💼 Hero Pre-Flop Strategy")
+hero_preflop_type = st.selectbox(
+    "Select Your Pre-Flop Strategy",
+    options=list(preflop_rules.keys()),
+    key="hero_preflop_type"
+)
+st.caption(f"Rule: {preflop_rules[hero_preflop_type]}")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -87,6 +98,16 @@ def estimate_equity_multiway(hero_hand, board, num_simulations=500, num_villains
 
     return (hero_wins + ties * 0.5) / num_simulations
 
+def get_hand_notation(card1, card2):
+    r1, s1 = card1[0], card1[1]
+    r2, s2 = card2[0], card2[1]
+    if r1 == r2:
+        return r1 + r2  # e.g., "AA"
+    suited = "s" if s1 == s2 else "o"
+    # Sort ranks for standard notation (AK, not KA)
+    ranks = "".join(sorted([r1, r2], reverse=True))
+    return ranks + suited
+
 # ---------- Equity & Kelly Section ----------
 with st.form("kelly_form"):
     pot_size = st.number_input(
@@ -108,6 +129,7 @@ with st.form("kelly_form"):
         starting_bankroll = float(starting_bankroll_choice)
     
     calculate = st.form_submit_button("🧮 Calculate Equity & Suggest Bet")
+    apply_bet = st.form_submit_button("Apply Bet")
     reset = st.form_submit_button("🔄 Reset Bankroll")
 
 if reset:
@@ -116,7 +138,6 @@ if reset:
     st.session_state.hands_played = 0
     st.session_state.history.clear()
     clear_history()
-    st.success(f"Bankroll reset to ${starting_bankroll} and history cleared from DB")
 
 # Sync the input value to session state if changed
 if pot_size != st.session_state.pot_size:
@@ -124,7 +145,7 @@ if pot_size != st.session_state.pot_size:
 
 if calculate:
     equity = estimate_equity_multiway(hero_hand, board, num_simulations=500, num_villains=num_villains)
-    st.metric(label="Estimated Hero Equity", value=f"{equity*100:.2f}%")
+    st.session_state.equity = equity
     bankroll = st.session_state.bankroll
     net_odds = pot_size / call_amount
     kelly_fraction = ((net_odds * equity) - (1 - equity)) / net_odds
@@ -132,30 +153,64 @@ if calculate:
     if use_half_kelly:
         kelly_fraction /= 2
     suggested_bet = round(kelly_fraction * bankroll, 2)
+    st.session_state.suggested_bet = suggested_bet
     st.write(f"📦 Current Bankroll: ${bankroll:.2f}")
     st.write(f"📊 Pot Odds: {call_amount / (pot_size + call_amount):.2%}")
     st.write(f"📈 Kelly Fraction: {kelly_fraction:.2%} {'(Half Kelly)' if use_half_kelly else '(Full Kelly)'}")
+    hero_hand_notation = get_hand_notation(hero_card1, hero_card2)
+    strategy = hero_preflop_type
+    action = preflop_actions.get(strategy, {}).get(hero_hand_notation, preflop_actions.get(strategy, {}).get("Any", "Check"))
+
+    if action == "All-in":
+        suggested_bet = st.session_state.bankroll
+        st.session_state.suggested_bet = suggested_bet
+    elif action.startswith("Raise"):
+        try:
+            multiplier = float(action.split()[1][:-1])  # e.g., "4x" -> 4
+        except Exception:
+            multiplier = 3
+        suggested_bet = round(multiplier * call_amount, 2)
+        st.session_state.suggested_bet = suggested_bet
+    elif action == "Fold":
+        suggested_bet = 0.0
+        st.session_state.suggested_bet = suggested_bet
+    else:
+        # fallback to Kelly
+        net_odds = pot_size / call_amount
+        kelly_fraction = ((net_odds * equity) - (1 - equity)) / net_odds
+        kelly_fraction = max(0, round(kelly_fraction, 4))
+        if use_half_kelly:
+            kelly_fraction /= 2
+        suggested_bet = round(kelly_fraction * bankroll, 2)
+        st.session_state.suggested_bet = suggested_bet
+
+    st.info(f"Preflop Action ({strategy}): {action}")
     st.success(f"💵 Suggested Bet: ${suggested_bet}")
 
-    if st.button("Apply Bet"):
-        st.session_state.bankroll -= suggested_bet
-        st.session_state.pot_size += suggested_bet
-        st.session_state.hands_played += 1
-        equity_pct = round(equity * 100, 2)
-        st.session_state.history.append({
-            "Hand": st.session_state.hands_played,
-            "Bet": suggested_bet,
-            "Equity": equity_pct,
-            "Bankroll": st.session_state.bankroll
-        })
+if apply_bet:
+    suggested_bet = st.session_state.get("suggested_bet", 0)
+    equity = st.session_state.get("equity", 0)
+    st.session_state.bankroll -= suggested_bet
+    st.session_state.pot_size += suggested_bet
+    st.session_state.hands_played += 1
+    equity_pct = round(equity * 100, 2)
+    st.session_state.history.append({
+        "Hand": st.session_state.hands_played,
+        "Bet": suggested_bet,
+        "Equity": equity_pct,
+        "Bankroll": st.session_state.bankroll
+    })
+    st.write(f"Saving to DB: hand={st.session_state.hands_played}, bet={suggested_bet}, equity={equity_pct}, bankroll={st.session_state.bankroll}")
+    try:
         save_hand(
-            hand=st.session_state.hands_played,
-            bet=suggested_bet,
-            equity=equity_pct,
-            bankroll=st.session_state.bankroll
+            st.session_state.hands_played,
+            suggested_bet,
+            equity_pct,
+            st.session_state.bankroll
         )
-        st.success(f"Bet ${suggested_bet} applied. Pot is now ${st.session_state.pot_size:.2f}")
-
+    except Exception as e:
+        st.error(f"Failed to save hand to the database: {e}")
+    st.success(f"Bet ${suggested_bet} applied. Pot is now ${st.session_state.pot_size:.2f}")
 
 # ---------- History & Chart ----------
 if st.checkbox("📜 Show Hand History and Bankroll Chart"):
@@ -168,3 +223,4 @@ if st.checkbox("📜 Show Hand History and Bankroll Chart"):
         hist_df["equity"] = hist_df["equity"].astype(float)
         st.line_chart(hist_df.set_index("hand")[["bankroll"]])
         st.dataframe(hist_df)
+
