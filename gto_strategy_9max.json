@@ -1,0 +1,51 @@
+{
+  "GTO": {
+    "Preflop": {
+      "UTG": {
+        "Raise": ["AA", "KK", "QQ", "AKs", "AQs"],
+        "Call": ["JJ", "TT", "AKo"],
+        "Fold": ["72o", "83o"]
+      },
+      "UTG+1": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "AKs", "AQs"],
+        "Call": ["TT", "99", "AKo"],
+        "Fold": ["62o", "93o"]
+      },
+      "MP": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "TT", "AKs", "AQs", "AJs"],
+        "Call": ["99", "88", "AQo", "KQs"],
+        "Fold": ["52o", "74o"]
+      },
+      "MP+1": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "TT", "99", "AKs", "AQs", "ATs"],
+        "Call": ["88", "77", "AQo", "AJo"],
+        "Fold": ["T3o", "42o"]
+      },
+      "HJ": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "TT", "99", "AKs", "AQs", "AJs", "KQs"],
+        "Call": ["88", "77", "KJs", "QJs"],
+        "Fold": ["92o", "53o"]
+      },
+      "CO": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "TT", "99", "88", "AKs", "AQs", "AJs", "ATs", "KQs"],
+        "Call": ["77", "66", "AJo", "KJs", "QTs"],
+        "Fold": ["T4o", "63o"]
+      },
+      "BTN": {
+        "Raise": ["Any suited Ace", "22", "KTs", "QJs", "JTs", "T9s", "98s", "A2s+", "KJo+", "QJo+"],
+        "Call": ["JTo", "T8s", "97s"],
+        "Fold": ["72o", "T3o", "84o"]
+      },
+      "SB": {
+        "Raise": ["AA", "KK", "QQ", "JJ", "AKs", "AQs", "AJs", "KQs"],
+        "Call": ["TT", "99", "AQo", "KJs"],
+        "Fold": ["93o", "T4o"]
+      },
+      "BB": {
+        "Raise": ["AA", "KK", "QQ","JJ", "AKs", "AQs", "AJs", "KQs"],
+        "Call":  [ "22", "33", "44", "55", "66", "77", "88","99","TT", "Any suited Ace", "KJo+", "QJo+"],
+        "Fold": ["T2o", "32o"]
+      }
+    }
+  }
+}
