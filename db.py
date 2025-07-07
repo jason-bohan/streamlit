@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Table, Column, Integer, Numeric, MetaData, TIMESTAMP, insert, delete, select
+from sqlalchemy import String, create_engine, Table, Column, Integer, Numeric, MetaData, TIMESTAMP, insert, delete, select
 from sqlalchemy.exc import ArgumentError
 from datetime import datetime
 from dotenv import load_dotenv
@@ -51,7 +51,8 @@ bankroll_history = Table("bankroll_history", metadata,
     Column("bet", Numeric),
     Column("equity", Numeric),
     Column("bankroll", Numeric),
-    Column("created_at", TIMESTAMP, default=datetime.utcnow),
+    Column("position", String(50)), # Adjusted to String for position
+    Column("created_at", TIMESTAMP, default=datetime.now)
 )
 
 # Create tables if they don't exist
@@ -61,7 +62,7 @@ try:
 except Exception as e:
     print(f"Error creating tables: {e}")
 
-def save_hand(hand, bet, equity, bankroll):
+def save_hand(hand, bet, equity, bankroll, position):
     try:
         with engine.connect() as conn:
             conn.execute(insert(bankroll_history), [{
@@ -69,6 +70,7 @@ def save_hand(hand, bet, equity, bankroll):
                 "bet": bet,
                 "equity": equity,
                 "bankroll": bankroll,
+                "position": position,  # Placeholder, can be updated later
             }])
             conn.commit()
         print(f"Hand {hand} saved successfully!")

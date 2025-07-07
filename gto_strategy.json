@@ -1,5 +1,5 @@
 {
-  "GTO": {
+  "GTO": {  
     "AA": "Raise 4x",
     "KK": "Raise 4x",
     "QQ": "Raise 4x",
@@ -86,6 +86,7 @@
   "Postflop": {
     "FlopCategory": {
       "PairedRainbow": {
+        "Quads": "Check",
         "Trips": "Bet 66%",
         "Overpair": "Bet 50%",
         "Air": "Check"
